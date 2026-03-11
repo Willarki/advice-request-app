@@ -1,0 +1,20 @@
+# Build outputs
+bin/
+obj/
+*.user
+.vs/
+*.suo
+
+# Rider
+.idea/
+
+# NuGet packages
+*.nupkg
+*.nuspec.sha512
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Visual Studio Code
+.vscode/
