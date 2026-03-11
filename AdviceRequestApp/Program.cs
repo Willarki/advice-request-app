@@ -4,6 +4,11 @@ using Microsoft.FluentUI.AspNetCore.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.Configure<IISOptions>(options =>
+{
+    options.AutomaticAuthentication = false;
+});
+
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
