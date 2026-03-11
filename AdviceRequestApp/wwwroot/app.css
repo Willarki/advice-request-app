@@ -1,0 +1,49 @@
+html, body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f5f5f5;
+}
+
+.content {
+    max-width: 800px;
+    margin: 32px auto;
+    padding: 0 16px;
+}
+
+.page-card {
+    padding: 24px;
+    margin-bottom: 24px;
+}
+
+.field-container {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mandatory-field {
+    background-color: #fffacd !important;
+}
+
+.mandatory-field::part(control) {
+    background-color: #fffacd;
+}
+
+.required-marker {
+    color: #d13438;
+    margin-left: 2px;
+}
+
+.nav-buttons {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+    justify-content: flex-end;
+}
+
+fluent-text-field.mandatory-field,
+fluent-text-area.mandatory-field,
+fluent-select.mandatory-field {
+    --fill-color: #fffacd;
+}

@@ -1,0 +1,270 @@
+@page "/request/page3"
+@rendermode InteractiveServer
+@inject FormStateService FormState
+@inject IFileService FileService
+@inject IWorkflowService WorkflowService
+@inject NavigationManager Navigation
+
+<PageTitle>Advice Request - Finalize Request</PageTitle>
+
+<FluentCard class="page-card">
+    <h2>Step 3 of 3: Finalize Request</h2>
+
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+        <div class="field-container">
+            <FluentLabel Weight="FontWeight.Bold">
+                Required By Date <span class="required-marker">*</span>
+            </FluentLabel>
+            <FluentDatePicker
+                @bind-Value="_requiredByDate"
+                Class="mandatory-field"
+                style="width: 100%;" />
+        </div>
+
+        <div class="field-container">
+            @if (FormState.IsExpeditingReasonRequired())
+            {
+                <FluentLabel Weight="FontWeight.Bold">
+                    Reason for Expediting <span class="required-marker">*</span>
+                </FluentLabel>
+            }
+            else
+            {
+                <FluentLabel Weight="FontWeight.Bold">
+                    Reason for Expediting (Optional)
+                </FluentLabel>
+            }
+            <FluentTextArea
+                @bind-Value="FormState.FormData.ReasonForExpediting"
+                Class="@(FormState.IsExpeditingReasonRequired() ? "mandatory-field" : "")"
+                Placeholder="Enter reason for expediting"
+                Rows="4"
+                style="width: 100%;" />
+        </div>
+
+        <div class="field-container">
+            <FluentLabel Weight="FontWeight.Bold">File Attachments (Optional)</FluentLabel>
+            <p style="margin: 4px 0; font-size: 0.875rem; color: #666;">
+                Maximum @FormState.Settings.MaxFileCount files, total size @FormState.Settings.MaxTotalFileSizeMB MB
+            </p>
+
+            @if (!string.IsNullOrEmpty(_fileError))
+            {
+                <FluentMessageBar Intent="MessageIntent.Error" style="margin-bottom: 8px;">
+                    @_fileError
+                </FluentMessageBar>
+            }
+
+            @if (FormState.FormData.UploadedFiles.Count < FormState.Settings.MaxFileCount)
+            {
+                <InputFile OnChange="HandleFileSelected" multiple style="margin-bottom: 8px;" />
+            }
+
+            @if (FormState.FormData.UploadedFiles.Count > 0)
+            {
+                <FluentDataGrid Items="@FormState.FormData.UploadedFiles.AsQueryable()" style="width: 100%;">
+                    <PropertyColumn Property="@(f => f.FileName)" Title="File Name" />
+                    <PropertyColumn Property="@(f => f.FormattedSize)" Title="Size" />
+                    <TemplateColumn Title="Action">
+                        <FluentButton
+                            Appearance="Appearance.Stealth"
+                            IconStart="@(new Icons.Regular.Size16.Delete())"
+                            OnClick="@(() => RemoveFile(context))"
+                            Disabled="@_isProcessing">
+                            Remove
+                        </FluentButton>
+                    </TemplateColumn>
+                </FluentDataGrid>
+            }
+        </div>
+    </FluentStack>
+
+    @if (!string.IsNullOrEmpty(_submitError))
+    {
+        <FluentMessageBar Intent="MessageIntent.Error" style="margin-top: 16px;">
+            @_submitError
+        </FluentMessageBar>
+    }
+
+    <div class="nav-buttons">
+        <FluentButton
+            Appearance="Appearance.Neutral"
+            OnClick="NavigateToPage2"
+            Disabled="@_isProcessing">
+            Previous
+        </FluentButton>
+        <FluentButton
+            Appearance="Appearance.Accent"
+            Disabled="@(!IsPage3Valid() || _isProcessing)"
+            OnClick="SubmitForm">
+            @if (_isProcessing)
+            {
+                <FluentProgressRing style="width: 16px; height: 16px;" />
+                <span style="margin-left: 8px;">Submitting...</span>
+            }
+            else
+            {
+                <span>Submit</span>
+            }
+        </FluentButton>
+        <FluentButton
+            Appearance="Appearance.Outline"
+            OnClick="CancelForm"
+            Disabled="@_isProcessing">
+            Cancel
+        </FluentButton>
+    </div>
+</FluentCard>
+
+@code {
+    private DateTime? _requiredByDate;
+    private bool _isProcessing = false;
+    private string _fileError = string.Empty;
+    private string _submitError = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        _requiredByDate = FormState.FormData.RequiredByDate ?? FormState.DefaultRequiredByDate;
+        if (!_requiredByDate.HasValue || _requiredByDate.Value == DateTime.MinValue)
+        {
+            _requiredByDate = DateTime.Today.AddDays(21);
+        }
+    }
+
+    private bool IsPage3Valid()
+    {
+        bool dateValid = _requiredByDate.HasValue;
+        bool expeditingValid = !FormState.IsExpeditingReasonRequired()
+            || !string.IsNullOrWhiteSpace(FormState.FormData.ReasonForExpediting);
+        return dateValid && expeditingValid;
+    }
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        _fileError = string.Empty;
+        var appSettings = FormState.Settings;
+        long maxTotalBytes = (long)(appSettings.MaxTotalFileSizeMB * 1024 * 1024);
+        var currentTotalSize = FormState.FormData.UploadedFiles.Sum(f => f.Size);
+        int remainingSlots = appSettings.MaxFileCount - FormState.FormData.UploadedFiles.Count;
+        var filesToProcess = e.GetMultipleFiles(remainingSlots);
+
+        foreach (var file in filesToProcess)
+        {
+            if (FormState.FormData.UploadedFiles.Count >= appSettings.MaxFileCount)
+            {
+                _fileError = $"Maximum of {appSettings.MaxFileCount} files allowed.";
+                break;
+            }
+
+            if (currentTotalSize + file.Size > maxTotalBytes)
+            {
+                _fileError = $"Total file size cannot exceed {appSettings.MaxTotalFileSizeMB} MB.";
+                break;
+            }
+
+            try
+            {
+                long remainingBytes = maxTotalBytes - currentTotalSize;
+                using var stream = file.OpenReadStream(maxAllowedSize: remainingBytes > 0 ? remainingBytes : maxTotalBytes);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                var base64 = Convert.ToBase64String(ms.ToArray());
+
+                int fileId = await FileService.UploadFileAsync(file.Name, base64, FormState.AdvReqID);
+
+                var uploadedFile = new UploadedFile
+                {
+                    FileName = file.Name,
+                    Size = file.Size,
+                    FileID = fileId,
+                    Base64Content = base64
+                };
+
+                FormState.FormData.UploadedFiles.Add(uploadedFile);
+                currentTotalSize += file.Size;
+            }
+            catch (Exception ex)
+            {
+                _fileError = $"Error uploading '{file.Name}': {ex.Message}";
+            }
+        }
+        StateHasChanged();
+    }
+
+    private async Task RemoveFile(UploadedFile file)
+    {
+        try
+        {
+            if (file.FileID > 0)
+            {
+                await FileService.DeleteFileAsync(file.FileID);
+            }
+            FormState.FormData.UploadedFiles.Remove(file);
+        }
+        catch (Exception ex)
+        {
+            _fileError = $"Error removing file: {ex.Message}";
+        }
+        StateHasChanged();
+    }
+
+    private async Task SubmitForm()
+    {
+        if (!IsPage3Valid())
+        {
+            return;
+        }
+
+        _isProcessing = true;
+        _submitError = string.Empty;
+
+        try
+        {
+            FormState.FormData.RequiredByDate = _requiredByDate;
+            bool success = await WorkflowService.SubmitWorkflowAsync(FormState.FormData, FormState.AdvReqID);
+
+            if (success)
+            {
+                FormState.Reset();
+                Navigation.NavigateTo("/request/page1");
+            }
+            else
+            {
+                _submitError = "Submission failed. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _submitError = $"An error occurred during submission: {ex.Message}";
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private async Task CancelForm()
+    {
+        _isProcessing = true;
+
+        try
+        {
+            foreach (var file in FormState.FormData.UploadedFiles.Where(f => f.FileID > 0).ToList())
+            {
+                await FileService.DeleteFileAsync(file.FileID);
+            }
+        }
+        catch (Exception ex)
+        {
+            _submitError = $"Error cancelling: {ex.Message}";
+        }
+
+        FormState.Reset();
+        Navigation.NavigateTo("/request/page1");
+    }
+
+    private void NavigateToPage2()
+    {
+        Navigation.NavigateTo("/request/page2");
+    }
+}

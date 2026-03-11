@@ -1,0 +1,139 @@
+@page "/request/page1"
+@rendermode InteractiveServer
+@inject FormStateService FormState
+@inject ILdapService LdapService
+@inject NavigationManager Navigation
+
+<PageTitle>Advice Request - Requester Information</PageTitle>
+
+<FluentCard class="page-card">
+    <h2>Step 1 of 3: Requester Information</h2>
+
+    @if (_isLoading)
+    {
+        <FluentProgressRing />
+        <p>Loading user information...</p>
+    }
+    else
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+            <div class="field-container">
+                <FluentLabel Weight="FontWeight.Bold">
+                    First Name <span class="required-marker">*</span>
+                </FluentLabel>
+                <FluentTextField
+                    @bind-Value="FormState.FormData.FirstName"
+                    Class="mandatory-field"
+                    Placeholder="Enter first name"
+                    style="width: 100%;" />
+            </div>
+
+            <div class="field-container">
+                <FluentLabel Weight="FontWeight.Bold">
+                    Last Name <span class="required-marker">*</span>
+                </FluentLabel>
+                <FluentTextField
+                    @bind-Value="FormState.FormData.LastName"
+                    Class="mandatory-field"
+                    Placeholder="Enter last name"
+                    style="width: 100%;" />
+            </div>
+
+            <div class="field-container">
+                <FluentLabel Weight="FontWeight.Bold">
+                    Business Area <span class="required-marker">*</span>
+                </FluentLabel>
+                <FluentTextField
+                    @bind-Value="FormState.FormData.BusinessArea"
+                    Class="mandatory-field"
+                    Placeholder="Enter business area"
+                    style="width: 100%;" />
+            </div>
+
+            <div class="field-container">
+                <FluentLabel Weight="FontWeight.Bold">
+                    Email <span class="required-marker">*</span>
+                </FluentLabel>
+                <FluentTextField
+                    @bind-Value="FormState.FormData.Email"
+                    Class="mandatory-field"
+                    Placeholder="Enter email address"
+                    TextFieldType="TextFieldType.Email"
+                    style="width: 100%;" />
+            </div>
+
+            <div class="field-container">
+                <FluentLabel Weight="FontWeight.Bold">
+                    Phone Number <span class="required-marker">*</span>
+                </FluentLabel>
+                <FluentTextField
+                    @bind-Value="FormState.FormData.PhoneNumber"
+                    Class="mandatory-field"
+                    Placeholder="Enter phone number"
+                    style="width: 100%;" />
+            </div>
+        </FluentStack>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <FluentMessageBar Intent="MessageIntent.Error" style="margin-top: 16px;">
+                @_errorMessage
+            </FluentMessageBar>
+        }
+
+        <div class="nav-buttons">
+            <FluentButton
+                Appearance="Appearance.Accent"
+                Disabled="@(!IsPage1Valid())"
+                OnClick="NavigateToPage2">
+                Next
+            </FluentButton>
+        </div>
+    }
+</FluentCard>
+
+@code {
+    private bool _isLoading = true;
+    private string _errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var userInfo = await LdapService.GetCurrentUserInfoAsync();
+            if (!string.IsNullOrEmpty(userInfo.FirstName) && string.IsNullOrEmpty(FormState.FormData.FirstName))
+            {
+                FormState.FormData.FirstName = userInfo.FirstName;
+                FormState.FormData.LastName = userInfo.LastName;
+                FormState.FormData.Email = userInfo.Email;
+                FormState.FormData.PhoneNumber = userInfo.PhoneNumber;
+                FormState.FormData.BusinessArea = userInfo.Department;
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Could not load user information: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private bool IsPage1Valid()
+    {
+        return !string.IsNullOrWhiteSpace(FormState.FormData.FirstName)
+            && !string.IsNullOrWhiteSpace(FormState.FormData.LastName)
+            && !string.IsNullOrWhiteSpace(FormState.FormData.BusinessArea)
+            && !string.IsNullOrWhiteSpace(FormState.FormData.Email)
+            && !string.IsNullOrWhiteSpace(FormState.FormData.PhoneNumber);
+    }
+
+    private void NavigateToPage2()
+    {
+        if (IsPage1Valid())
+        {
+            Navigation.NavigateTo("/request/page2");
+        }
+    }
+}

@@ -1,0 +1,164 @@
+@page "/request/page2"
+@rendermode InteractiveServer
+@inject FormStateService FormState
+@inject IODataService ODataService
+@inject IConfigurationService ConfigService
+@inject NavigationManager Navigation
+
+<PageTitle>Advice Request - Request Details</PageTitle>
+
+<FluentCard class="page-card">
+    <h2>Step 2 of 3: Request Details</h2>
+
+    @if (_isLoading)
+    {
+        <FluentProgressRing />
+        <p>Loading areas...</p>
+    }
+    else
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+            <div class="field-container">
+                <FluentLabel Weight="FontWeight.Bold">
+                    Responsible Area <span class="required-marker">*</span>
+                </FluentLabel>
+                <FluentSelect
+                    TOption="AreaInfo"
+                    Items="@FormState.Areas"
+                    OptionValue="@(a => a.ListValueID.ToString())"
+                    OptionText="@(a => a.Area)"
+                    @bind-SelectedOption="_selectedArea"
+                    Class="mandatory-field"
+                    Placeholder="Select a responsible area"
+                    style="width: 100%;" />
+            </div>
+
+            <div class="field-container">
+                <FluentLabel Weight="FontWeight.Bold">
+                    Request Description <span class="required-marker">*</span>
+                </FluentLabel>
+                <FluentTextArea
+                    @bind-Value="FormState.FormData.RequestDescription"
+                    Class="mandatory-field"
+                    Placeholder="Enter request description"
+                    Rows="4"
+                    style="width: 100%;" />
+            </div>
+
+            <div class="field-container">
+                <FluentLabel Weight="FontWeight.Bold">
+                    Request Details <span class="required-marker">*</span>
+                </FluentLabel>
+                <FluentTextArea
+                    @bind-Value="FormState.FormData.RequestDetails"
+                    Class="mandatory-field"
+                    Placeholder="Enter request details"
+                    Rows="4"
+                    style="width: 100%;" />
+            </div>
+
+            <div class="field-container">
+                <FluentCheckbox
+                    @bind-Value="FormState.FormData.IsCustomer"
+                    Label="Is Customer" />
+            </div>
+
+            @if (FormState.FormData.IsCustomer)
+            {
+                <div class="field-container">
+                    <FluentLabel Weight="FontWeight.Bold">
+                        Customer ID <span class="required-marker">*</span>
+                    </FluentLabel>
+                    <FluentTextField
+                        @bind-Value="FormState.FormData.CustID"
+                        Class="mandatory-field"
+                        Placeholder="Enter customer ID"
+                        style="width: 100%;" />
+                </div>
+            }
+        </FluentStack>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <FluentMessageBar Intent="MessageIntent.Error" style="margin-top: 16px;">
+                @_errorMessage
+            </FluentMessageBar>
+        }
+
+        <div class="nav-buttons">
+            <FluentButton
+                Appearance="Appearance.Neutral"
+                OnClick="NavigateToPage1">
+                Previous
+            </FluentButton>
+            <FluentButton
+                Appearance="Appearance.Accent"
+                Disabled="@(!IsPage2Valid())"
+                OnClick="NavigateToPage3">
+                Next
+            </FluentButton>
+        </div>
+    }
+</FluentCard>
+
+@code {
+    private bool _isLoading = true;
+    private string _errorMessage = string.Empty;
+    private AreaInfo? _selectedArea;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var settings = ConfigService.GetAppSettings();
+        FormState.Settings = settings;
+
+        try
+        {
+            if (FormState.Areas.Count == 0)
+            {
+                FormState.Areas = await ODataService.GetAreasAsync();
+            }
+
+            if (FormState.FormData.ResponsibleAreaId.HasValue)
+            {
+                _selectedArea = FormState.Areas.FirstOrDefault(a => a.ListValueID == FormState.FormData.ResponsibleAreaId.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Could not load areas: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private bool IsPage2Valid()
+    {
+        bool areaSelected = _selectedArea != null;
+        bool descriptionFilled = !string.IsNullOrWhiteSpace(FormState.FormData.RequestDescription);
+        bool detailsFilled = !string.IsNullOrWhiteSpace(FormState.FormData.RequestDetails);
+        bool custIdValid = !FormState.FormData.IsCustomer || !string.IsNullOrWhiteSpace(FormState.FormData.CustID);
+        return areaSelected && descriptionFilled && detailsFilled && custIdValid;
+    }
+
+    private void NavigateToPage1()
+    {
+        Navigation.NavigateTo("/request/page1");
+    }
+
+    private void NavigateToPage3()
+    {
+        if (!IsPage2Valid())
+        {
+            return;
+        }
+        if (_selectedArea != null)
+        {
+            FormState.FormData.ResponsibleAreaId = _selectedArea.ListValueID;
+            FormState.FormData.ResponsibleAreaName = _selectedArea.Area;
+            FormState.SetDefaultRequiredByDate(_selectedArea);
+        }
+        Navigation.NavigateTo("/request/page3");
+    }
+}
